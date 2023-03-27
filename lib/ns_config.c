@@ -1,4 +1,4 @@
-#include "ns_config.h"
+#include <ns_config.h>
 
 void ns_config_default(ns_config *cfg)
 {

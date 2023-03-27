@@ -1,5 +1,5 @@
-#ifndef _NS_STACK_SAFETY_DDOS_H_
-#define _NS_STACK_SAFETY_DDOS_H_
+#ifndef _NS_STACK_SAFETY_NS_DDOS_H_
+#define _NS_STACK_SAFETY_NS_DDOS_H_
 
 #include <rte_ethdev.h>
 

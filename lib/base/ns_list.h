@@ -1,5 +1,5 @@
-#ifndef _NETSTACK_BASE_LIST_H_
-#define _NETSTACK_BASE_LIST_H_
+#ifndef _NETSTACK_BASE_NS_LIST_H_
+#define _NETSTACK_BASE_NS_LIST_H_
 
 #define NS_LIST_ADD(item, list) do {		\
 	item->prev = NULL;				\

@@ -11,10 +11,10 @@
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
 
-#include "ns_dpdk_if.h"
-#include "ns_config.h"
-#include "ns_error.h"
-#include "ns_process.h"
+#include <ns_dpdk_if.h>
+#include <ns_config.h>
+#include <ns_process.h>
+#include <error/ns_error.h>
 
 #define NS_MBUF_CACHE_SIZE 0
 #define NS_MBUF_PRIV_SIZE  0
@@ -27,6 +27,10 @@
 
 #define NS_IN_RING_BUFFER_SIZE  1024
 #define NS_OUT_RING_BUFFER_SIZE 1024
+
+// ns boolean types
+#define NS_TRUE  1
+#define NS_FALSE 0
 
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {.max_rx_pkt_len = RTE_ETHER_MAX_LEN }
@@ -170,15 +174,24 @@ int ns_dpdk_init(int argc, char **argv, ns_config *cfg, ns_dpdk_meta* dpdk_meta)
 
 int ns_dpdk_start(ns_dpdk_meta* dpdk_meta)
 {
-    while (1) {
-        struct rte_mbuf *rx_pkts[dpdk_meta->burst_size];
+    // create net-stack processor
+    ns_processor *processor = create_processor();
+    if (processor == NULL) {
+        printf("ns_dpdk_start: create processor failed..\n");
+        return NS_ERROR_CREATE_PROCESSOR_FAILED;
+    }
+
+    struct rte_mbuf *rx_pkts[dpdk_meta->burst_size];
+    while (NS_TRUE) {
         uint16_t recvd_nb = rte_eth_rx_burst(
             dpdk_meta->port_id,
             0,
             (struct rte_mbuf **)rx_pkts,
             dpdk_meta->burst_size
         );
-        // if (recvd_nb > 0) 
+        if (recvd_nb > 0) {
+            process_packets(processor, rx_pkts, recvd_nb);
+        }
     }
 
     return NS_OK;

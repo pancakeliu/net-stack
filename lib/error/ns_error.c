@@ -1,4 +1,4 @@
-#include "ns_error.h"
+#include <error/error.h>
 
 const char *ns_strerror(const int error_code)
 {
@@ -21,8 +21,12 @@ const char *ns_strerror(const int error_code)
         return "ns_error_port_start_failed";
     case NS_ERROR_GET_PORT_MAC_ADDRESS_FAILED:
         return "ns_error_get_port_mac_address_failed";
-    case NS_ERROR_PROCESS_PACKETS_EMPTY:
-        return "ns_error_process_packets_empty";
+    case NS_ERROR_ARP_RECORD_ALREADY_EXISTS:
+        return "ns_error_arp_record_already_exists";
+    case NS_ERROR_RTE_MALLOC_FAILED:
+        return "ns_error_rte_malloc_failed";
+    case NS_ERROR_CREATE_PROCESSOR_FAILED:
+        return "ns_error_create_processor_failed";
 
     default:
         break;
