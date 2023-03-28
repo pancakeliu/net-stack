@@ -1,6 +1,6 @@
-#include "lib/ns_dpdk_if.h"
-#include "lib/ns_config.h"
-#include "lib/ns_error.h"
+#include <ns_dpdk_if.h>
+#include <ns_config.h>
+#include <error/ns_error.h>
 
 int main(int argc, char **argv) {
     struct ns_dpdk_meta dpdk_meta;
@@ -14,6 +14,19 @@ int main(int argc, char **argv) {
     }
 
     printf("hello world....\n");
+
+    // create net-stack processor
+    ns_processor *processor = create_processor();
+    if (processor == NULL) {
+        printf("net-stack create processor failed..\n");
+        return -1;
+    }
+
+    ret = ns_dpdk_start(&dpdk_meta, processor);
+    if (ret != NS_OK) {
+        printf("net-stack start dpdk worker failed. err:%s..\n", ns_strerror(ret));
+        return ret;
+    }
 
     return 0;
 }

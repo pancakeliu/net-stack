@@ -12,19 +12,19 @@ typedef struct ns_arp_entry {
 
     struct ns_arp_entry *next;
     struct ns_arp_entry *prev;
-} ns_arp_entry;
+} ns_arp_entry_t;
 
 // Each worker thread has a separate arp table
 typedef struct ns_arp_table {
     struct ns_arp_entry *entries;
     int                  count;
-} ns_arp_table;
+} ns_arp_table_t;
 
-struct ns_arp_table *create_arp_table();
+ns_arp_table_t *create_arp_table();
 
-uint8_t *find_dst_macaddr(ns_arp_table *arp_table, uint32_t ip);
+uint8_t *find_dst_macaddr(ns_arp_table_t *arp_table, uint32_t ip);
 
 // arp table
-int arp_entry_insert(ns_arp_table *arp_table, uint32_t ip, uint8_t *mac);
+int arp_entry_insert(ns_arp_table_t *arp_table, uint32_t ip, uint8_t *mac);
 
 #endif // _NETSATCK_PROTO_ARP_H_

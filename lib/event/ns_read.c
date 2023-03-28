@@ -1,39 +1,14 @@
-#include <strings.h>
 #include <stdio.h>
 
-#include <rte_byteorder.h>
+#include <rte_mbuf.h>
 #include <rte_ether.h>
-#include <rte_malloc.h>
+#include <rte_ip.h>
 
-#include <ns_process.h>
-#include <error/ns_error.h>
-#include <safety/ns_ddos.h>
+#include <event/ns_read.h>
 #include <proto/ns_arp.h>
+#include <error/ns_error.h>
 
-ns_processor *create_processor()
-{
-    ns_processor *processor = rte_malloc(
-        "net-stack processor",
-        sizeof(struct ns_processor),
-        0
-    )
-    if (processor == NULL) {
-        printf("create_processor: rte_malloc exec failed.\n");
-        return NULL;
-    }
-    bzero(processor, sizeof(struct ns_processor));
-
-    ns_arp_table *arp_table = create_arp_table();
-    if (arp_table == NULL) {
-        printf("create_processor: create arp table failed.\n");
-        return NULL;
-    }
-    processor->arp_table = arp_table;
-
-    return processor;
-}
-
-static int process_packet(ns_processor *processor, struct rte_mbuf *rx_pkt)
+static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
 {
     // parse ethernet header
     struct rte_ehther_hdr *eth_hdr = rte_pktmbuf_mtod(
@@ -73,14 +48,21 @@ static int process_packet(ns_processor *processor, struct rte_mbuf *rx_pkt)
     // TODO: return kni
 }
 
-void process_packets(ns_processor *processor, struct rte_mbuf **rx_pkts, uint16_t pkts_nb)
+void handle_read_events(
+    struct ns_processor *processor,
+    struct rte_mbuf **rx_pkts,
+    uint16_t pkts_nb
+)
 {
     if (pkts_nb == 0) return;
     
     for (int i = 0; i < pkts_nb; i++) {
-        int rc = process_packet(processor, rx_pkts[i]);
+        int rc = handle_read_packet(processor, rx_pkts[i]);
         if (rc != NS_OK) {
-            printf("process_packets: process packet failed. err:%s..\n", ns_strerror(rc));
+            printf(
+                "process_packets: process packet failed. err:%s..\n",
+                ns_strerror(rc)
+            );
         }
     }
 }

@@ -1,5 +1,8 @@
-#ifndef _NETSATCK_PROTO_NS_UDP_H_
-#define _NETSATCK_PROTO_NS_UDP_H_
+#ifndef _NETSATCK_PROTO_UDP_H_
+#define _NETSATCK_PROTO_UDP_H_
 
+#include <rte_mbuf.h>
 
-#endif // _NETSATCK_PROTO_NS_UDP_H_
+int udp_process(struct rte_mbuf *udpmbuf);
+
+#endif // _NETSATCK_PROTO_UDP_H_

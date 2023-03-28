@@ -8,9 +8,9 @@
 #include <base/ns_list.h>
 #include <error/ns_error.h>
 
-struct ns_arp_table *create_arp_table()
+ns_arp_table_t *create_arp_table()
 {
-    struct ns_arp_table *arp_table = rte_malloc(
+    ns_arp_table_t *arp_table = rte_malloc(
         "net-stack arp table",
         sizeof(struct ns_arp_table),
         0
@@ -35,7 +35,7 @@ uint8_t *find_dst_macaddr(ns_arp_table *arp_table, uint32_t dst_ip)
     return NULL;
 }
 
-int arp_entry_insert(ns_arp_table *arp_table, uint32_t ip, uint8_t *mac)
+int arp_entry_insert(ns_arp_table_t *arp_table, uint32_t ip, uint8_t *mac)
 {
     if (find_dst_macaddr(arp_table, ip) != NULL) {
         return NS_ERROR_ARP_RECORD_ALREADY_EXISTS;

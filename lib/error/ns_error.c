@@ -27,6 +27,8 @@ const char *ns_strerror(const int error_code)
         return "ns_error_rte_malloc_failed";
     case NS_ERROR_CREATE_PROCESSOR_FAILED:
         return "ns_error_create_processor_failed";
+    case NS_ERROR_SET_SERVER_CALLBACKS_FAILED:
+        return "ns_error_set_server_callbacks_failed";
 
     default:
         break;

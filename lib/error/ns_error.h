@@ -14,6 +14,7 @@ static const int NS_ERROR_GET_PORT_MAC_ADDRESS_FAILED = -9;
 static const int NS_ERROR_ARP_RECORD_ALREADY_EXISTS   = -10;
 static const int NS_ERROR_RTE_MALLOC_FAILED           = -11;
 static const int NS_ERROR_CREATE_PROCESSOR_FAILED     = -12;
+static const int NS_ERROR_SET_SERVER_CALLBACKS_FAILED = -13;
 
 const char *ns_strerror(const int error_code);
 
