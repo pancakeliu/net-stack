@@ -3,6 +3,8 @@
 
 #include <rte_mbuf.h>
 
-int udp_process(struct rte_mbuf *udpmbuf);
+#include <proto/ns_offload.h>
+
+int udp_process(struct rte_mbuf *udpmbuf, ns_offload_t *offload);
 
 #endif // _NETSATCK_PROTO_UDP_H_

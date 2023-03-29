@@ -2,6 +2,9 @@
 #define _NETSTACK_NS_ERROR_H_
 
 static const int NS_OK                                = 0;
+
+static const int NS_KNI                               = 1;
+
 static const int NS_ERROR_EAL_INIT_FAILED             = -1;
 static const int NS_ERROR_MEMPOOL_CREATE_FAILED       = -2;
 static const int NS_ERROR_NO_AVALIABLE_ETH_DEV        = -3;
@@ -15,6 +18,9 @@ static const int NS_ERROR_ARP_RECORD_ALREADY_EXISTS   = -10;
 static const int NS_ERROR_RTE_MALLOC_FAILED           = -11;
 static const int NS_ERROR_CREATE_PROCESSOR_FAILED     = -12;
 static const int NS_ERROR_SET_SERVER_CALLBACKS_FAILED = -13;
+static const int NS_ERROR_CODE                        = -14;
+static const int NS_ERROR_UDP_PROCESS_FAILED          = -15;
+static const int NS_ERROR_TCP_PROCESS_FAILED          = -16;
 
 const char *ns_strerror(const int error_code);
 

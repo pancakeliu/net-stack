@@ -21,12 +21,20 @@ typedef struct ns_server {
     ns_other_on_write_callback other_on_write_cb;
 } ns_server_t;
 
-ns_server_t *new_server(
+ns_server_t *ns_new_server(
     char *server_name,
     uint32_t ip_address, uint16_t listen_port, int protocol
 );
 
-void free_server(ns_server_t *server);
+void ns_free_server(ns_server_t *server);
+
+#define NS_SERVER_MATCH     1
+#define NS_SERVER_NOT_MATCH 0
+
+int server_match(
+    ns_server_t *server,
+    uint32_t ip_address, uint16_t listen_port, int protocol
+);
 
 int set_udp_callbacks(
     ns_server_t *server,

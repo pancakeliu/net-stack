@@ -8,7 +8,7 @@
 #include <server/ns_server.h>
 #include <error/ns_error.h>
 
-ns_server_t *new_server(
+ns_server_t *ns_new_server(
     char *server_name,
     uint32_t ip_address, uint16_t listen_port, int protocol
 )
@@ -29,9 +29,25 @@ ns_server_t *new_server(
     return server;
 }
 
-void free_server(ns_server_t *server)
+void ns_free_server(ns_server_t *server)
 {
     rte_free(server);
+}
+
+int server_match(
+    ns_server_t *server,
+    uint32_t ip_address, uint16_t listen_port, int protocol
+)
+{
+    if (
+        server->ip_address == ip_address &&
+        server->listen_port == listen_port &&
+        server->protocol == protocol
+    ) {
+        return NS_SERVER_MATCH;
+    }
+
+    return NS_SERVER_NOT_MATCH;
 }
 
 int set_udp_callbacks(

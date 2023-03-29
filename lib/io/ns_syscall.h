@@ -1,0 +1,4 @@
+#ifndef _NETSTACK_IO_SYSCALL_H_
+#define _NETSTACK_IO_SYSCALL_H_
+
+#endif // _NETSTACK_IO_SYSCALL_

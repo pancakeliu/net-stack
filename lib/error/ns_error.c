@@ -1,4 +1,4 @@
-#include <error/error.h>
+#include <error/ns_error.h>
 
 const char *ns_strerror(const int error_code)
 {
@@ -29,6 +29,12 @@ const char *ns_strerror(const int error_code)
         return "ns_error_create_processor_failed";
     case NS_ERROR_SET_SERVER_CALLBACKS_FAILED:
         return "ns_error_set_server_callbacks_failed";
+    case NS_ERROR_CODE:
+        return "ns_error_code";
+    case NS_ERROR_UDP_PROCESS_FAILED:
+        return "ns_error_udp_process_failed";
+    case NS_ERROR_TCP_PROCESS_FAILED:
+        return "ns_error_tcp_process_failed";
 
     default:
         break;

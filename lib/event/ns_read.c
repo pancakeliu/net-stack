@@ -6,7 +6,11 @@
 
 #include <event/ns_read.h>
 #include <proto/ns_arp.h>
+#include <proto/ns_udp.h>
+#include <proto/ns_tcp.h>
+#include <proto/ns_offload.h>
 #include <error/ns_error.h>
+#include <base/ns_print.h>
 
 static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
 {
@@ -29,7 +33,7 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
         ipv4_hdr->src_addr, ipv4_hdr->s_addr.addr_bytes
     );
     if (rc != NS_OK && rc != NS_ERROR_ARP_RECORD_ALREADY_EXISTS) {
-        printf("packet_process: arp entry insert failed. err=%s..\n", ns_strerror(rc));
+        NS_PRINT("arp entry insert failed. err:%s..\n", ns_strerror(rc));
         return rc;
     }
 
@@ -38,11 +42,21 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
     // other transport layer protocols use kni
 
     if (ipv4_hdr->next_proto_id == IPPROTO_TCP) {
-        return ns_tcp_process(rx_pkt);
+        return tcp_process(rx_pkt);
     }
 
     if (ipv4_hdr->next_proto_id == IPPROTO_UDP) {
-        return ns_udp_process(rx_pkt);
+        ns_offload_t *offload = new_offload();
+        if (offload == NULL) {
+            NS_PRINT("new offload failed..\n");
+            return NS_ERROR_RTE_MALLOC_FAILED;
+        }
+        int rc = udp_process(rx_pkt, offload);
+        if (rc != NS_OK) {
+            NS_PRINT("process udp packet failed. err:%s...\n", ns_strerror(rc));
+            free_offload(offload);
+            return rc;
+        }
     }
 
     // TODO: return kni

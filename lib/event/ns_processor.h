@@ -4,6 +4,7 @@
 #include <rte_ethdev.h>
 
 #include <proto/ns_arp.h>
+#include <proto/ns_offload.h>
 #include <server/ns_server.h>
 
 typedef struct ns_server_entry {
@@ -19,9 +20,15 @@ typedef struct ns_processor {
     uint32_t                server_count;
 } ns_processor_t;
 
-ns_processor_t *new_processor();
+ns_processor_t *ns_new_processor();
 
-int register_server(ns_processor_t *processor, ns_server_t *server);
+int ns_register_server(ns_processor_t *processor, ns_server_t *server);
+
+int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload);
+int exec_udp_write_cb(ns_processor_t *processsor, ns_offload_t *offload);
+
+int exec_tcp_read_cb(ns_processor_t *processor, ns_offload_t *offload);
+int exec_tcp_write_cb(ns_processor_t *processor, ns_offload_t *offload);
 
 // Notice: service cancellation function is not supported
 
