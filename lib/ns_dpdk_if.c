@@ -191,9 +191,15 @@ int ns_dpdk_start(ns_dpdk_meta* dpdk_meta, ns_processor *processor)
         );
         if (recvd_nb > 0) {
             handle_read_events(processor, rx_pkts, recvd_nb);
+
+            // free all received packets
+            rte_pktmbuf_free_bulk(rx_pkts, recvd_nb);
         }
 
         // handling write events
+        handle_write_events(processor);
+
+        // timer events
     }
 
     return NS_OK;

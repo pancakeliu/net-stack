@@ -35,6 +35,8 @@ const char *ns_strerror(const int error_code)
         return "ns_error_udp_process_failed";
     case NS_ERROR_TCP_PROCESS_FAILED:
         return "ns_error_tcp_process_failed";
+    case NS_ERROR_CHECKSUM_MISMATCH:
+        return "ns_error_checksum_mismatch";
 
     default:
         break;

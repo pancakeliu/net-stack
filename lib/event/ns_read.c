@@ -57,6 +57,17 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
             free_offload(offload);
             return rc;
         }
+
+        rc = exec_udp_read_cb(processor, offload);
+        free_offload(offload);
+
+        if (rc == NS_OK) return NS_OK;
+        if (rc < NS_OK) {
+            NS_PRINT(
+                "exec upd read callback function failed. err:%s...\n", ns_strerror(rc)
+            );
+            return rc;
+        }
     }
 
     // TODO: return kni

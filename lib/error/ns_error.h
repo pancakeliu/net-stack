@@ -21,6 +21,7 @@ static const int NS_ERROR_SET_SERVER_CALLBACKS_FAILED = -13;
 static const int NS_ERROR_CODE                        = -14;
 static const int NS_ERROR_UDP_PROCESS_FAILED          = -15;
 static const int NS_ERROR_TCP_PROCESS_FAILED          = -16;
+static const int NS_ERROR_CHECKSUM_MISMATCH           = -17;
 
 const char *ns_strerror(const int error_code);
 
