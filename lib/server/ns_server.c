@@ -8,34 +8,118 @@
 #include <server/ns_server.h>
 #include <error/ns_error.h>
 
-ns_server_t *ns_new_server(
-    char *server_name,
-    uint32_t ip_address, uint16_t listen_port, int protocol
+ns_udp_server_t *ns_new_udp_server(
+    const char *server_name,
+    uint32_t ip_address, uint16_t listen_port
 )
 {
-    ns_server_t *server = rte_malloc(
-        server,
-        sizeof(struct ns_server),
+    ns_udp_server_t *server = rte_malloc(
+        server_name,
+        sizeof(struct ns_udp_server),
         0
     );
-    if (ns_server == NULL) return NULL;
-    bzero(server, sizeof(struct ns_server));
+    if (server == NULL) return NULL;
+    bzero(server, sizeof(struct ns_udp_server));
 
-    server->server     = server_name;
-    server->ip_address = ip_address;
-    server->port       = port;
-    server->protocol   = protocol;
+    server->server_name = server_name;
+    server->ip_address  = ip_address;
+    server->listen_port = listen_port;
 
     return server;
 }
 
-void ns_free_server(ns_server_t *server)
+void ns_free_udp_server(ns_udp_server_t *server)
 {
     rte_free(server);
 }
 
-int server_match(
-    ns_server_t *server,
+ns_tcp_server_t *ns_new_tcp_server(
+    const char *server_name,
+    uint32_t ip_address, uint16_t listen_port
+)
+{
+    ns_tcp_table_t *tcp_table = new_tcp_table();
+    if (tcp_table == NULL) return NULL;
+
+    ns_tcp_server_t *server = rte_malloc(
+        server_name,
+        sizeof(struct ns_tcp_server),
+        0
+    );
+    if (server == NULL) return NULL;
+    bzero(server, sizeof(struct ns_tcp_server));
+
+    server->server_name = server_name;
+    server->ip_address  = ip_address;
+    server->listen_port = listen_port;
+    server->tcp_table   = tcp_table;
+
+    return server;
+}
+
+void ns_free_tcp_server(ns_tcp_server_t *server)
+{
+    rte_free(server);
+}
+
+ns_other_server_t *ns_new_other_server(
+    const char *server_name,
+    uint32_t ip_address, uint16_t listen_port, int protocol
+)
+{
+    ns_other_server_t *server = rte_malloc(
+        server_name,
+        sizeof(struct ns_other_server),
+        0
+    );
+    if (server == NULL) return NULL;
+    bzero(server, sizeof(struct ns_other_server));
+
+    server->server_name = server_name;
+    server->ip_address  = ip_address;
+    server->listen_port = listen_port;
+    server->protocol    = protocol;
+
+    return server;
+}
+
+void ns_free_other_server(ns_other_server_t *server)
+{
+    rte_free(server);
+}
+
+int udp_server_match(
+    ns_udp_server_t *server,
+    uint32_t ip_address, uint16_t listen_port
+)
+{
+    if (
+        server->ip_address == ip_address &&
+        server->listen_port == listen_port
+    ) {
+        return NS_SERVER_MATCH;
+    }
+
+    return NS_SERVER_NOT_MATCH;
+}
+
+int tcp_server_match(
+    ns_tcp_server_t *server,
+    uint32_t ip_address, uint16_t listen_port
+)
+{
+    if (
+        server->ip_address == ip_address &&
+        server->listen_port == listen_port
+    ) {
+        return NS_SERVER_MATCH;
+    }
+
+    return NS_SERVER_NOT_MATCH;
+}
+
+int other_server_match(
+    ns_other_server_t *server,
     uint32_t ip_address, uint16_t listen_port, int protocol
 )
 {
@@ -50,8 +134,8 @@ int server_match(
     return NS_SERVER_NOT_MATCH;
 }
 
-int set_udp_callbacks(
-    ns_server_t *server,
+int ns_udp_callbacks_set(
+    ns_udp_server_t *server,
     ns_udp_on_read_callback  udp_on_read_cb,
     ns_udp_on_write_callback udp_on_write_cb
 )
@@ -65,8 +149,8 @@ int set_udp_callbacks(
     return NS_OK;
 }
 
-int set_tcp_callbacks(
-    ns_server_t *server,
+int ns_tcp_callbacks_set(
+    ns_tcp_server_t *server,
     ns_tcp_on_read_callback  tcp_on_read_cb,
     ns_tcp_on_write_callback tcp_on_write_cb
 )
@@ -80,8 +164,8 @@ int set_tcp_callbacks(
     return NS_OK;
 }
 
-int set_other_callbacks(
-    ns_server_t *server,
+int ns_other_callbacks_set(
+    ns_other_server_t *server,
     ns_other_on_read_callback  other_on_read_cb,
     ns_other_on_write_callback other_on_write_cb
 )

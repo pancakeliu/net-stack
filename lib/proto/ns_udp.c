@@ -10,7 +10,7 @@
 #include <error/ns_error.h>
 #include <base/ns_print.h>
 
-int udp_process(struct rte_mbuf *udp_mbuf, ns_offload_t *offload)
+int udp_parse_header(struct rte_mbuf *udp_mbuf, ns_offload_t *offload)
 {
     struct rte_ipv4_hdr *ipv4_hdr = rte_pktmbuf_mtod_offset(
         udp_mbuf, struct rte_ipv4_hdr *,

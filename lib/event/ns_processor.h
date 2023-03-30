@@ -7,28 +7,49 @@
 #include <proto/ns_offload.h>
 #include <server/ns_server.h>
 
-typedef struct ns_server_entry {
-    ns_server_t *server;
+typedef struct ns_udp_server_entry {
+    ns_udp_server_t *server;
 
-    struct ns_server_entry *next;
-    struct ns_server_entry *prev;
-} ns_server_entry_t;
+    struct ns_udp_server_entry *next;
+    struct ns_udp_server_entry *prev;
+} ns_udp_server_entry_t;
+
+typedef struct ns_tcp_server_entry {
+    ns_tcp_server_t *server;
+
+    struct ns_tcp_server_entry *next;
+    struct ns_tcp_server_entry *prev;
+} ns_tcp_server_entry_t;
+
+typedef struct ns_other_server_entry {
+    ns_other_server_t *server;
+
+    struct ns_other_server_entry *next;
+    struct ns_other_server_entry *prev;
+} ns_other_server_entry_t;
 
 typedef struct ns_processor {
-    struct ns_arp_table    *arp_table;
-    struct ns_server_entry *server_entries;
-    uint32_t                server_count;
+    ns_arp_table            *arp_table;
+
+    ns_udp_server_entry_t   *udp_server_entries;
+    uint32_t                 udp_server_count;
+
+    ns_tcp_server_entry_t   *tcp_server_entries;
+    uint32_t                 tcp_server_count;
+
+    ns_other_server_entry_t *other_server_entries;
+    uint32_t                 other_server_count;
 } ns_processor_t;
 
 ns_processor_t *ns_new_processor();
 
-int ns_register_server(ns_processor_t *processor, ns_server_t *server);
+int ns_register_udp_server(ns_processor_t *processor, ns_udp_server_t *server);
+int ns_register_tcp_server(ns_processor_t *processor, ns_tcp_server_t *server);
+int ns_register_other_server(ns_processor_t *processor, ns_other_server_t *server);
 
-int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload);
-int exec_udp_write_cb(ns_processor_t *processsor, ns_offload_t *offload);
-
-int exec_tcp_read_cb(ns_processor_t *processor, ns_offload_t *offload);
-int exec_tcp_write_cb(ns_processor_t *processor, ns_offload_t *offload);
+int process_udp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt);
+int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt);
+int process_other_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt);
 
 // Notice: service cancellation function is not supported
 

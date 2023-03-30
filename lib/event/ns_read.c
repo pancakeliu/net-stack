@@ -3,6 +3,7 @@
 #include <rte_mbuf.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
+#include <rte_tcp.h>
 
 #include <event/ns_read.h>
 #include <proto/ns_arp.h>
@@ -42,25 +43,11 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
     // other transport layer protocols use kni
 
     if (ipv4_hdr->next_proto_id == IPPROTO_TCP) {
-        return tcp_process(rx_pkt);
+        
     }
 
-    if (ipv4_hdr->next_proto_id == IPPROTO_UDP) {
-        ns_offload_t *offload = new_offload();
-        if (offload == NULL) {
-            NS_PRINT("new offload failed..\n");
-            return NS_ERROR_RTE_MALLOC_FAILED;
-        }
-        int rc = udp_process(rx_pkt, offload);
-        if (rc != NS_OK) {
-            NS_PRINT("process udp packet failed. err:%s...\n", ns_strerror(rc));
-            free_offload(offload);
-            return rc;
-        }
-
-        rc = exec_udp_read_cb(processor, offload);
-        free_offload(offload);
-
+    else if (ipv4_hdr->next_proto_id == IPPROTO_UDP) {
+        int rc = process_udp_read_event(processor, rx_pkt);
         if (rc == NS_OK) return NS_OK;
         if (rc < NS_OK) {
             NS_PRINT(
@@ -68,6 +55,10 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
             );
             return rc;
         }
+    }
+
+    else {
+
     }
 
     // TODO: return kni
