@@ -44,7 +44,7 @@ typedef struct ns_tcp_entry {
 
     NS_TCP_STATUS tcp_status;
 
-    // read / write buffer
+    // send buffer
     rte_ring *snd_buffer;
     rte_ring *rcv_buffer;
 
@@ -78,9 +78,12 @@ ns_tcp_entry_t *create_tcp_entry(
     uint8_t *src_mac_address
 );
 
+void free_tcp_entry(ns_tcp_entry_t *tcp_entry);
+
 void tcp_entry_set_status(ns_tcp_entry_t *tcp_entry, NS_TCP_STATUS status);
 
 ns_tcp_packet_t *create_tcp_packet();
+void free_tcp_packet(ns_tcp_packet_t *tcp_packet);
 
 ns_tcp_entry_t *search_tcp_entry(
     ns_tcp_table_t *tcp_table,
@@ -95,11 +98,16 @@ int tcp_parse_header(
     struct rte_tcp_hdr **tcp_hdr
 );
 
-int tcp_server_state_machine_exec(
-    struct rte_mbuf *tcp_mbuf,
+int tcp_state_machine_exec(
+    int is_server,
+    ns_tcp_table_t *tcp_table,
     ns_tcp_entry_t *tcp_entry,
+    struct rte_ether_hdr *ether_hdr,
     struct rte_ipv4_hdr *ipv4_hdr, struct rte_tcp_hdr *tcp_hdr,
     ns_offload_t **offload
 );
+
+// Called by the user to reply to data via this function
+int ns_tcp_send_message(ns_tcp_entry *tcp_entry, char *message);
 
 #endif // _NETSATCK_PROTO_NS_TCP_H_

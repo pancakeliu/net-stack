@@ -20,7 +20,7 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
         rx_pkt, struct rte_ether_hdr *
     );
     if (eth_hdr->ether_type != rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4)) {
-        // TODO: return kni
+        return NS_KNI;
     }
 
     // parse ipv4 header
@@ -43,25 +43,14 @@ static int handle_read_event(ns_processor *processor, struct rte_mbuf *rx_pkt)
     // other transport layer protocols use kni
 
     if (ipv4_hdr->next_proto_id == IPPROTO_TCP) {
-        
+        return process_tcp_read_event(processor, rx_pkt);
     }
 
     else if (ipv4_hdr->next_proto_id == IPPROTO_UDP) {
-        int rc = process_udp_read_event(processor, rx_pkt);
-        if (rc == NS_OK) return NS_OK;
-        if (rc < NS_OK) {
-            NS_PRINT(
-                "exec upd read callback function failed. err:%s...\n", ns_strerror(rc)
-            );
-            return rc;
-        }
+        return process_udp_read_event(processor, rx_pkt);
     }
 
-    else {
-
-    }
-
-    // TODO: return kni
+    return NS_KNI;
 }
 
 void handle_read_events(
@@ -73,8 +62,11 @@ void handle_read_events(
     if (pkts_nb == 0) return;
     
     for (int i = 0; i < pkts_nb; i++) {
-        int rc = handle_read_packet(processor, rx_pkts[i]);
-        if (rc != NS_OK) {
+        int rc = handle_read_event(processor, rx_pkts[i]);
+        if (rc == NS_KNI) {
+            // TODO: kni handle
+        }
+        if (rc < NS_OK) {
             printf(
                 "process_packets: process packet failed. err:%s..\n",
                 ns_strerror(rc)

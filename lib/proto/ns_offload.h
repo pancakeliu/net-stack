@@ -16,7 +16,7 @@ typedef struct ns_offload {
     uint16_t data_len;
 } ns_offload_t;
 
-ns_offload_t *new_offload();
+ns_offload_t *create_offload();
 void free_offload(ns_offload_t *offload);
 
 int fill_five_tuple(

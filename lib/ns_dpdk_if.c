@@ -181,6 +181,7 @@ int ns_dpdk_start(ns_dpdk_meta* dpdk_meta, ns_processor *processor)
     }
 
     struct rte_mbuf *rx_pkts[dpdk_meta->burst_size];
+    struct rte_mbuf *tx_pkts[dpdk_meta->burst_size];
     while (NS_TRUE) {
         // handling read events
         uint16_t recvd_nb = rte_eth_rx_burst(
@@ -197,7 +198,7 @@ int ns_dpdk_start(ns_dpdk_meta* dpdk_meta, ns_processor *processor)
         }
 
         // handling write events
-        handle_write_events(processor);
+        handle_write_events(processor, tx_pkts);
 
         // timer events
     }

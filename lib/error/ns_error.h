@@ -1,5 +1,5 @@
-#ifndef _NETSTACK_NS_ERROR_H_
-#define _NETSTACK_NS_ERROR_H_
+#ifndef _NETSTACK_ERROR_ERROR_H_
+#define _NETSTACK_ERROR_ERROR_H_
 
 static const int NS_OK                                = 0;
 
@@ -22,7 +22,10 @@ static const int NS_ERROR_CODE                        = -14;
 static const int NS_ERROR_UDP_PROCESS_FAILED          = -15;
 static const int NS_ERROR_TCP_PROCESS_FAILED          = -16;
 static const int NS_ERROR_CHECKSUM_MISMATCH           = -17;
+static const int NS_ERROR_TCP_SEQ_NUMBER              = -18;
+static const int NS_ERROR_TCP_PROTOCOL_ILLEGAL        = -19;
+static const int NS_ERROR_RING_ENQUEUE_FAILED         = -20;
 
 const char *ns_strerror(const int error_code);
 
-#endif // _NETSTACK_ERROR_H_
+#endif // _NETSTACK_ERROR_ERROR_H_

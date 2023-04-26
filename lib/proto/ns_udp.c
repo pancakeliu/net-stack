@@ -33,7 +33,7 @@ int udp_parse_header(struct rte_mbuf *udp_mbuf, ns_offload_t *offload)
         IPPROTO_UDP
     )
     if (rc != NS_OK) {
-        NS_PRINT("fill  five tuple failed. err:%s", ns_strerror(rc));
+        NS_PRINT("fill five tuple failed. err:%s", ns_strerror(rc));
         return NS_ERROR_UDP_PROCESS_FAILED;
     }
     rc = fill_data(

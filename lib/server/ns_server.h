@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include <rte_ring.h>
+
 #include <server/ns_callback.h>
 #include <proto/ns_tcp.h>
 
@@ -10,6 +12,9 @@ typedef struct ns_udp_server {
     char    *server_name;
     uint32_t ip_address;
     uint16_t listen_port;
+
+    // udp packet delivery queue
+    struct rte_ring *send_buffer;
 
     ns_udp_on_read_callback  udp_on_read_cb;
     ns_udp_on_write_callback udp_on_write_cb;

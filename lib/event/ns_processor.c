@@ -13,7 +13,7 @@
 #include <base/ns_list.h>
 #include <error/ns_error.h>
 
-ns_processor *ns_new_processor()
+ns_processor *ns_create_processor()
 {
     ns_processor *processor = rte_malloc(
         "net-stack processor",
@@ -80,31 +80,9 @@ int ns_register_tcp_server(ns_processor_t *processor, ns_tcp_server_t *server)
     return NS_OK;
 }
 
-int ns_register_other_server(ns_processor_t *processor, ns_other_server_t *server)
-{
-    if (processor == NULL || server == NULL) {
-        return NS_ERROR_CODE;
-    }
-    ns_other_server_entry_t *server_entry = rte_malloc(
-        "net-stack other server entry",
-        sizeof(struct ns_other_server_entry),
-        0
-    );
-    if (server_entry == NULL) {
-        return NS_ERROR_RTE_MALLOC_FAILED;
-    }
-
-    bzero(server_entry, sizeof(struct ns_other_server_entry));
-    server_entry->server = server;
-
-    NS_LIST_ADD(server_entry, processor->other_server_entries);
-
-    return NS_OK;
-}
-
 int process_udp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
 {
-    ns_offload_t *offload = new_offload();
+    ns_offload_t *offload = create_offload();
     if (offload == NULL) {
         NS_PRINT("new offload failed..\n");
         return NS_ERROR_RTE_MALLOC_FAILED;
@@ -124,7 +102,7 @@ int process_udp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
 static int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
 {
     ns_udp_server_entry_t *server_iter = processor->udp_server_entries;
-    for (; server_iter != NULL; server_iter = server_iter->next) {
+    for (; server_iter; server_iter = server_iter->next) {
         int match = udp_server_match(
             server_iter->server,
             offload->dst_ip_addr, offload->dst_port
@@ -133,7 +111,7 @@ static int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
             continue;
         }
 
-        if (server_iter->server->udp_on_read_cb != NULL) {
+        if (server_iter->server->udp_on_read_cb) {
             return server_iter->server->udp_on_read_cb();
         }
     }
@@ -148,7 +126,7 @@ static ns_tcp_server_t *search_tcp_server(
 )
 {
     ns_tcp_server_entry_t *server_iter = processor->tcp_server_entries;
-    for (; server_iter != NULL; server_iter = server_iter) {
+    for (; server_iter; server_iter = server_iter) {
         int match = tcp_server_match(
             server_iter->server,
             ipv4_hdr->dst_addr, tcp_hdr->dst_port
@@ -163,10 +141,21 @@ static ns_tcp_server_t *search_tcp_server(
 
 static int exec_tcp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
 {
-    
-}
+    ns_tcp_server_entry_t server_iter = processor->tcp_server_entries;
+    for (; server_iter; server_iter = iter->next) {
+        int match = udp_server_match(
+            server_iter->server,
+            offload->dst_ip_addr, offload->dst_port
+        );
+        if (match != NS_SERVER_MATCH) {
+            continue;
+        }
 
-statuc 
+        if (server_iter->server->tcp_on_read_cb) {
+            return server_iter->server->tcp_on_read_cb();
+        }
+    }
+}
 
 int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
 {
@@ -192,14 +181,24 @@ int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
     if (tcp_entry == NULL) return NS_KNI;
 
     // tcp state machine
-    tcp_server_state_machine_exec
+    ns_offload_t *offload = NULL;
+    rc = tcp_server_state_machine_exec(
+        server->tcp_table,
+        tcp_entry,
+        ether_hdr, ipv4_hdr, tcp_hdr,
+        &offload
+    );
+    if (rc != NS_OK) {
+        return rc;
+    }
 
-    return NS_OK;
-}
+    // PSH packet received
+    if (*offload != NULL) {
+        rc = exec_tcp_read_cb(processor, *offload);
+        free_offload(*offload);
+    }
 
-int process_other_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
-{
-
+    return rc;
 }
 
 int exec_udp_write_cb(ns_processor_t *processsor, ns_offload_t *offload)

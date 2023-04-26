@@ -8,7 +8,7 @@
 #include <proto/ns_offload.h>
 #include <error/ns_error.h>
 
-ns_offload_t *new_offload()
+ns_offload_t *create_offload()
 {
     ns_offload_t *offload = rte_malloc(
         "net-stack offload",

@@ -14,20 +14,24 @@
 #include <proto/ns_tcp.h>
 #include <proto/ns_offload.h>
 #include <base/ns_print.h>
+#include <base/ns_list.h>
 #include <error/ns_error.h>
 
 #define RING_NAME_SIZE 32
 #define RING_SIZE      1024
 #define TCP_WINDOW     25600
 
-// tcp server status handler functions
+// TODO: Retransmission packet handling
+// TODO: Disordered packet handling
+
 static int tcp_handle_listen_status_packet(
-    ns_tcp_table_t *tcp_table,
+    ns_tcp_table_t *listen_tcp_table,
     ns_tcp_entry_t *tcp_entry,
     struct rte_ether_hdr *ether_hdr,
     struct rte_ipv4_hdr *ipv4_hdr,
     struct rte_tcp_hdr *tcp_hdr
 );
+
 static int tcp_handle_syn_recv_status_packet(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 );
@@ -40,8 +44,41 @@ static int tcp_handle_last_ack_status_packet(
 
 // tcp established status handler function
 static int tcp_handle_established_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr,
-    ns_offload_t *offload
+    ns_tcp_entry_t *tcp_entry,
+    struct rte_ipv4_hdr *ipv4_hdr, struct rte_tcp_hdr *tcp_hdr,
+    ns_offload_t **offload
+);
+
+static int tcp_handle_syn_sent_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+static int tcp_handle_fin_wait_1_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+static int tcp_handle_fin_wait_2_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+static int tcp_handle_closing_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+static int tcp_handle_time_wait_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+// Update recv serial number
+static int update_recv_seq_number(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+);
+
+// tcp send packet to peer
+static int tcp_send_packet(
+    ns_tcp_entry_t *tcp_entry,
+    struct rte_tcp_hdr *tcp_hdr,
+    uint32_t data_len, char *data
 );
 
 ns_tcp_table_t *create_tcp_table()
@@ -106,6 +143,13 @@ ns_tcp_entry_t *create_tcp_entry(
     return tcp_entry;
 }
 
+void free_tcp_entry(ns_tcp_entry_t *tcp_entry)
+{
+    rte_ring_free(tcp_entry->snd_buffer);
+    rte_ring_free(tcp_entry->rcv_buffer);
+    rte_free(tcp_entry);
+}
+
 void tcp_entry_set_status(ns_tcp_entry_t *tcp_entry, NS_TCP_STATUS status)
 {
     tcp_entry->status = status;
@@ -122,6 +166,11 @@ ns_tcp_packet_t *create_tcp_packet()
     bzero(tcp_packet, sizeof(struct ns_tcp_packet));
 
     return tcp_packet;
+}
+
+void free_tcp_packet(struct ns_tcp_packet_t *tcp_packet)
+{
+    rte_free(tcp_packet);
 }
 
 ns_tcp_entry_t *search_tcp_entry(
@@ -180,8 +229,8 @@ int tcp_parse_header(
     return NS_OK;
 }
 
-int tcp_server_state_machine_exec(
-    struct rte_mbuf *tcp_mbuf,
+int tcp_state_machine_exec(
+    int is_server,
     ns_tcp_table_t *tcp_table,
     ns_tcp_entry_t *tcp_entry,
     struct rte_ether_hdr *ether_hdr,
@@ -196,38 +245,57 @@ int tcp_server_state_machine_exec(
         case NS_TCP_STATUS_CLOSED:
             break;
 
-        // Server TCP Status
         case NS_TCP_STATUS_ESTABLISHED:
-            int tcp_length = ntohs(ipv4_hdr->tcp_length) - sizeof(struct rte_ipv4_hdr);
             rc = tcp_handle_established_status_packet(
-                tcp_entry, tcp_hdr, tcp_length
+                tcp_entry, ipv4_hdr, tcp_hdr, offload
             );
             break;
 
+        // Server TCP Status
         case NS_TCP_STATUS_LISTEN:
+            if (!is_server) {
+                return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+            }
             rc = tcp_handle_listen_status_packet(
                 tcp_table, tcp_entry, ether_hdr, tcp_hdr, ipv4_hdr
             );
             break;
 
         case NS_TCP_STATUS_SYN_RCVD:
-            // TODO: handle syn_recv packet
+            rc = tcp_handle_syn_recv_status_packet(tcp_entry, tcp_hdr);
             break;
 
+        // TCP passive disconnection state
         case NS_TCP_STATUS_CLOSE_WAIT:
-            // TODO: handle close_wait packet
+            rc = tcp_handle_close_wait_packet(tcp_entry, tcp_hdr);
             break;
 
         case NS_TCP_STATUS_LAST_ACK:
-            // TODO: handler last_ack packet
+            rc = tcp_handle_last_ack_status_packet(tcp_entry, tcp_hdr);
             break;
 
         // Client TCP Status
         case NS_TCP_STATUS_SYN_SENT:
+            if (is_server) {
+                return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+            }
+            rc = tcp_handle_syn_sent_status_packet(tcp_entry, tcp_hdr);
+            break;
+
+        // TCP active disconnection status
         case NS_TCP_STATUS_FIN_WAIT1:
+            rc = tcp_handle_fin_wait_1_status_packet(tcp_entry, tcp_hdr);
+            break;
+
         case NS_TCP_STATUS_FIN_WAIT2:
+            rc = tcp_handle_fin_wait_2_status_packet(tcp_entry, tcp_hdr);
+            break;
+
         case NS_TCP_STATUS_CLOSING:
+            rc = tcp_handle_closing_status_packet(tcp_entry, tcp_hdr);
+
         case NS_TCP_STATUS_TIME_WAIT:
+            rc = tcp_handle_time_wait_status_packet(tcp_entry, tcp_hdr);
             break;
     }
 
@@ -237,22 +305,223 @@ int tcp_server_state_machine_exec(
 // tcp server status handler functions
 static int tcp_handle_listen_status_packet(
     ns_tcp_table_t *tcp_table,
-    ns_tcp_entry_t *tcp_entry,
+    ns_tcp_entry_t *listen_tcp_entry,
     struct rte_ether_hdr *ether_hdr,
     struct rte_ipv4_hdr *ipv4_hdr,
     struct rte_tcp_hdr *tcp_hdr
 )
 {
-    if (!(tcp_hdr->tcp_flas & RTE_TCP_SYN_FLAG) || tcp_entry->status != NS_TCP_STATUS_LISTEN) {
-        return NS_OK;
+    if (!(tcp_hdr->tcp_flas & RTE_TCP_SYN_FLAG)) {
+        return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
     }
-    ns_tcp_entry_t *tcp_entry = create_tcp_entry(
+    ns_tcp_entry_t *syn_tcp_entry = create_tcp_entry(
         ipv4_hdr->src_addr, ipv4_hdr->dst_addr,
         tcp_hdr->src_port, tcp_hdr->dst_port,
         ether_hdr->dst_addr,
     );
-    if (tcp_entry == NULL) {
+    if (syn_tcp_entry == NULL) {
         return NS_ERROR_RTE_MALLOC_FAILED;
+    }
+
+    update_recv_seq_number(syn_tcp_entry, tcp_hdr);
+    // Send back SYN + ACK packet
+    int rc = tcp_send_packet(
+        syn_tcp_entry, tcp_hdr, RTE_TCP_SYN_FLAG | RTE_TCP_ACK_FLAG,
+        0, NULL
+    );
+    if (rc != NS_OK) {
+        return rc;
+    }
+
+    tcp_entry->tcp_status = NS_TCP_STATUS_SYN_RCVD;
+
+    // Add tcp entry to tcp table
+    NS_LIST_ADD(tcp_table->tcp_entries, syn_tcp_entry);
+
+    return NS_OK;
+}
+
+static int tcp_handle_syn_recv_status_packet(
+    ns_tcp_entry_t *syn_tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    if (!(tcp_hdr->tcp_flags & RTE_TCP_ACK_FLAG)) {
+        return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+    }
+
+    update_recv_seq_number(syn_tcp_entry, tcp_hdr);
+    tcp_entry->tcp_status = NS_TCP_STATUS_ESTABLISHED;
+
+    return NS_OK;
+}
+
+static int tcp_handle_close_wait_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+}
+
+static int tcp_handle_last_ack_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    if (!(tcp_hdr->tcp_flags & RTE_TCP_ACK_FLAG)) {
+        return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+    }
+
+    tcp_entry->tcp_status = NS_TCP_STATUS_CLOSED;
+    free_tcp_entry(tcp_entry);
+
+    // REMOVE tcp entry to tcp table
+    NS_LIST_DEL(tcp_table->tcp_entries, syn_tcp_entry);
+
+    return NS_OK;
+}
+
+// tcp established status handler function
+static int tcp_handle_established_status_packet(
+    ns_tcp_entry_t *tcp_entry,
+    struct rte_ipv4_hdr *ipv4_hdr, struct rte_tcp_hdr *tcp_hdr,
+    ns_offload_t **offload
+)
+{
+    if (!(tcp_hdr->tcp_flags & RTE_TCP_PSH_FLAG)) {
+        if (tcp_hdr->tcp_flags & RTE_TCP_ACK_FLAG) {
+            return NS_OK;
+        }
+        return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
+    }
+
+    *offload = create_offload();
+    if (*offload == NULL) {
+        return NS_ERROR_RTE_MALLOC_FAILED;
+    }
+
+    char *data = rte_pktmbuf_mtod_offset(
+        tcp_hdr, char *,
+        sizeof(struct rte_tcp_hdr)
+    );
+
+    // fill offload
+    int rc = fill_five_tuple(
+        *offload,
+        ipv4_hdr->src_addr, ipv4_hdr->dst_addr,
+        tcp_hdr->src_port, tcp_hdr->dst_port,
+        IPPROTO_TCP
+    )
+    if (rc != NS_OK) {
+        NS_PRINT("fill five tuple failed. err:%s", ns_strerror(rc));
+        return NS_ERROR_TCP_PROCESS_FAILED;
+    }
+    rc = fill_data(
+        *offload,
+        data,
+        ntohs(ipv4_hdr->tcp_length) - sizeof(struct rte_ipv4_hdr)
+    );
+    if (rc != NS_OK) {
+        NS_PRINT("fill data failed. err:%s", ns_strerror(rc));
+        return NS_ERROR_TCP_PROCESS_FAILED;
+    }
+
+    return NS_OK;
+}
+
+static int tcp_handle_syn_sent_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    // When a tcp connection is in SYN-SENT phase, only SYN + ACK packets
+    // from the Server side are processed in reply
+    if (!(tcp_hdr->tcp_flag & RTE_TCP_SYN_FLAG) ||
+        !(tcp_hdr->tcp_flag & RTE_TCP_ACK_FLAG))
+    {
+        return NS_ERROR_TCP_PROCESS_FAILED;
+    }
+
+    update_recv_seq_number(tcp_entry, tcp_hdr);
+    int rc = tcp_send_packet(
+        tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+        0, NULL
+    );
+    if (rc != NS_OK) {
+        return rc;
+    }
+    tcp_entry->tcp_status = NS_TCP_STATUS_ESTABLISHED;
+
+    return NS_OK;
+}
+
+static int tcp_handle_fin_wait_1_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    if (tcp_hdr->tcp_flags & RTE_TCP_ACK_FLAG) {
+        // NOTICE: TCP 4 waves may be simplified to 3 waves back
+        if (tcp_hdr->tcp_flags & RTE_TCP_FIN_FLAG) {
+            update_recv_seq_number(tcp_entry, tcp_hdr);
+            int rc = tcp_send_packet(
+                tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+                0, NULL
+            );
+            if (rc != NS_OK) {
+                return rc;
+            }
+            tcp_entry->tcp_status = NS_TCP_STATUS_TIME_WAIT;
+
+            return NS_OK;
+        }
+
+        update_recv_seq_number(tcp_entry, tcp_hdr);
+        tcp_entry->tcp_status = NS_TCP_STATUS_FIN_WAIT2;
+
+        return NS_OK;
+    }
+
+    if (tcp_hdr->tcp_flags & RTE_TCP_FIN_FLAG) {
+
+    }
+
+    return NS_TCP_STATUS_ESTABLISHED;
+}
+
+static int tcp_handle_fin_wait_2_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+
+}
+
+static int tcp_handle_closing_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+
+}
+
+static int tcp_handle_time_wait_status_packet(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+
+}
+
+static int update_recv_seq_number(
+    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+)
+{
+    tcp_entry->rcv_nxt = ntohl(tcp_hdr->sent_seq) + 1;
+}
+
+static int tcp_send_packet(
+    ns_tcp_entry_t *tcp_entry,
+    struct rte_tcp_hdr *tcp_hdr, uint8_t tcp_flag,
+    uint32_t data_len, char *data
+)
+{
+    if (!(tcp_flag & RTE_TCP_PSH_FLAG) && data_len > 0) {
+        NS_PRINT("tcp data not empty, but has no RTE_TCP_PSH_FLAG..\n");
+        return NS_ERROR_TCP_PROTOCOL_ILLEGAL;
     }
 
     ns_tcp_packet_t *tcp_packet = create_tcp_packet();
@@ -263,48 +532,36 @@ static int tcp_handle_listen_status_packet(
     tcp_packet->tcp_hdr.dst_port = tcp_entry->src_port;
 
     tcp_packet->tcp_hdr.sent_seq = tcp_entry->snd_nxt;
-    tcp_packet->tcp_hdr.recv_ack = ntohl(tcp_hdr->sent_seq) + 1;
-    tcp_entry->rcv_nxt           = tcp_packet->tcp_hdr.recv_ack;
+    tcp_packet->tcp_hdr.recv_ack = tcp_entry->rcv_nxt;
 
+    // NOTICE: TCP Options is not supported at this time
+    // Data offset (4 bits)
+    //   Specifies the size of the TCP header in 32-bit words.
+    //   The minimum size header is 5 words and the maximum is 15 words thus giving
+    //   the minimum size of 20 bytes and maximum of 60 bytes,
+    //   allowing for up to 40 bytes of options in the header.
+    //   This field gets its name from the fact that it is also the offset from
+    //   the start of the TCP segment to the actual data.
+    // 
+    // Reserved (4 bits)
+    // For future use and should be set to zero.
+    // From 2003–2017, the last bit (bit 103 of the header) was defined as the NS (Nonce Sum) flag by the experimental RFC 3540,
+    // ECN-nonce. ECN-nonce never gained widespread use and the RFC was moved to Historic status.
     tcp_packet->tcp_hdr.data_off  = 0x50;
-    tcp_packet->tcp_hdr.tcp_flags = RTE_TCP_SYN_FLAG | RTE_TCP_ACK_FLAG;
-    tcp_packet->tcp_hdr.rx_win    = TCP_WINDOW;
+    tcp_packet->tcp_hdr.tcp_flags = tcp_flag;
 
-    tcp_packet->data_length = 0;
-    tcp_packet->data        = NULL;
+    // NOTICE: ARQ is not supported at this stage
+    tcp_packet->tcp_hdr.rx_win = TCP_WINDOW;
 
-    rte_ring_mp_enqueue(tcp_entry->snd_buffer, tcp_packet);
-    tcp_entry->tcp_status = NS_TCP_STATUS_SYN_RCVD;
+    // NOTICE: TCP Segmentation is not supported at this stage
+    tcp_packet->data_length = data_len;
+    tcp_packet->data        = data;
+
+    int rc = rte_ring_enqueue(tcp_entry->snd_buffer, tcp_packet);
+    if (rc != 0) {
+        free_tcp_packet(tcp_packet);
+        return NS_ERROR_RING_ENQUEUE_FAILED;
+    }
 
     return NS_OK;
-}
-
-static int tcp_handle_syn_recv_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
-)
-{
-
-}
-
-static int tcp_handle_close_wait_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
-)
-{
-
-}
-
-static int tcp_handle_last_ack_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
-)
-{
-
-}
-
-// tcp established status handler function
-static int tcp_handle_established_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr,
-    ns_offload_t *offload
-)
-{
-    
 }

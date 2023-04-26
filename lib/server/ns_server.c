@@ -8,6 +8,8 @@
 #include <server/ns_server.h>
 #include <error/ns_error.h>
 
+#define UDP_RING_SIZE 4096
+
 ns_udp_server_t *ns_new_udp_server(
     const char *server_name,
     uint32_t ip_address, uint16_t listen_port
@@ -21,6 +23,13 @@ ns_udp_server_t *ns_new_udp_server(
     if (server == NULL) return NULL;
     bzero(server, sizeof(struct ns_udp_server));
 
+    server->send_buffer = rte_ring_create(
+        "udp server send buffer ring",
+        UDP_RING_SIZE,
+        rte_socket_id(),
+        NULL
+    );
+
     server->server_name = server_name;
     server->ip_address  = ip_address;
     server->listen_port = listen_port;
@@ -30,6 +39,7 @@ ns_udp_server_t *ns_new_udp_server(
 
 void ns_free_udp_server(ns_udp_server_t *server)
 {
+    rte_ring_free(server->send_buffer);
     rte_free(server);
 }
 
