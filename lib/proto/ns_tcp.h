@@ -107,7 +107,4 @@ int tcp_state_machine_exec(
     ns_offload_t **offload
 );
 
-// Called by the user to reply to data via this function
-int ns_tcp_send_message(ns_tcp_entry *tcp_entry, char *message);
-
 #endif // _NETSATCK_PROTO_NS_TCP_H_

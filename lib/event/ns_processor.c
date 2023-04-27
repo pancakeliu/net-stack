@@ -11,6 +11,7 @@
 #include <proto/ns_tcp.h>
 #include <base/ns_print.h>
 #include <base/ns_list.h>
+#include <base/ns_common.h>
 #include <error/ns_error.h>
 
 ns_processor *ns_create_processor()
@@ -139,22 +140,16 @@ static ns_tcp_server_t *search_tcp_server(
     return NULL;
 }
 
-static int exec_tcp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
+static int exec_tcp_read_cb(
+    ns_tcp_server_t *server, ns_tcp_entry_t *tcp_entry, ns_offload_t *offload
+)
 {
-    ns_tcp_server_entry_t server_iter = processor->tcp_server_entries;
-    for (; server_iter; server_iter = iter->next) {
-        int match = udp_server_match(
-            server_iter->server,
-            offload->dst_ip_addr, offload->dst_port
-        );
-        if (match != NS_SERVER_MATCH) {
-            continue;
-        }
-
-        if (server_iter->server->tcp_on_read_cb) {
-            return server_iter->server->tcp_on_read_cb();
-        }
+    // Execute the on_read callback function
+    if (server->tcp_on_read_cb) {
+        return server->tcp_on_read_cb(tcp_entry, offload);
     }
+
+    return NS_OK;
 }
 
 int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
@@ -182,7 +177,8 @@ int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
 
     // tcp state machine
     ns_offload_t *offload = NULL;
-    rc = tcp_server_state_machine_exec(
+    rc = tcp_state_machine_exec(
+        NS_TRUE,
         server->tcp_table,
         tcp_entry,
         ether_hdr, ipv4_hdr, tcp_hdr,
@@ -194,8 +190,8 @@ int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
 
     // PSH packet received
     if (*offload != NULL) {
-        rc = exec_tcp_read_cb(processor, *offload);
-        free_offload(*offload);
+        rc = exec_tcp_read_cb(server, tcp_entry, offload);
+        free_offload(offload);
     }
 
     return rc;

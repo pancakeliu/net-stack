@@ -1,0 +1,7 @@
+#ifndef _NETSTACK_BASE_COMMON_H_
+#define _NETSTACK_BASE_COMMON_H_
+
+#define NS_TRUE  1
+#define NS_FALSE 0
+
+#endif // _NETSTACK_BASE_COMMON_H_

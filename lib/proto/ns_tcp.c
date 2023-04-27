@@ -70,14 +70,14 @@ static int tcp_handle_time_wait_status_packet(
 );
 
 // Update recv serial number
-static int update_recv_seq_number(
+static void update_recv_seq_number(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 );
 
 // tcp send packet to peer
 static int tcp_send_packet(
     ns_tcp_entry_t *tcp_entry,
-    struct rte_tcp_hdr *tcp_hdr,
+    struct rte_tcp_hdr *tcp_hdr, uint8_t tcp_flag,
     uint32_t data_len, char *data
 );
 
@@ -458,6 +458,7 @@ static int tcp_handle_fin_wait_1_status_packet(
 {
     if (tcp_hdr->tcp_flags & RTE_TCP_ACK_FLAG) {
         // NOTICE: TCP 4 waves may be simplified to 3 waves back
+        // After that, the active disconnected party state will transition directly to TIME_WAIT
         if (tcp_hdr->tcp_flags & RTE_TCP_FIN_FLAG) {
             update_recv_seq_number(tcp_entry, tcp_hdr);
             int rc = tcp_send_packet(
@@ -478,35 +479,61 @@ static int tcp_handle_fin_wait_1_status_packet(
         return NS_OK;
     }
 
+    // NOTICE: If a FIN packet is received in the FIN_WAIT_1 state,
+    // it changes its state to CLOSING and sends an ACK packet to the other end
     if (tcp_hdr->tcp_flags & RTE_TCP_FIN_FLAG) {
+        update_recv_seq_number(tcp_entry, tcp_hdr);
+        tcp_entry->tcp_status = NS_TCP_STATUS_CLOSING;
 
+        return tcp_send_packet(
+            tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+            0, NULL
+        );
     }
 
-    return NS_TCP_STATUS_ESTABLISHED;
+    return NS_ERROR_TCP_PROCESS_FAILED;
 }
 
 static int tcp_handle_fin_wait_2_status_packet(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 )
 {
+    if (tcp_hdr->flags ~ RTE_TCP_FIN_FLAG) {
+        return NS_ERROR_TCP_PROCESS_FAILED;
+    }
 
+    update_recv_seq_number(tcp_entry, tcp_hdr);
+    tcp_entry->tcp_status = NS_TCP_STATUS_TIME_WAIT;
+
+    return tcp_send_packet(
+        tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+        0, NULL
+    );
 }
 
 static int tcp_handle_closing_status_packet(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 )
 {
+    if (tcp_hdr->tcp_flags ~ RTE_TCP_ACK_FLAG) {
+        return NS_ERROR_TCP_PROCESS_FAILED;
+    }
 
+    update_recv_seq_number(tcp_entry, tcp_hdr);
+    tcp_entry->tcp_status = NS_TCP_STATUS_TIME_WAIT;
+
+    return NS_OK;
 }
 
 static int tcp_handle_time_wait_status_packet(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 )
 {
-
+    // TODO: Wait 2MSL to recycle the connectionWait 2MSL to recycle the connection
+    return NS_OK;
 }
 
-static int update_recv_seq_number(
+static void update_recv_seq_number(
     ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
 )
 {
