@@ -23,8 +23,8 @@ ns_udp_server_t *ns_new_udp_server(
     if (server == NULL) return NULL;
     bzero(server, sizeof(struct ns_udp_server));
 
-    server->send_buffer = rte_ring_create(
-        "udp server send buffer ring",
+    server->snd_queue = rte_ring_create(
+        "udp server send queue ring",
         UDP_RING_SIZE,
         rte_socket_id(),
         NULL
@@ -72,32 +72,6 @@ void ns_free_tcp_server(ns_tcp_server_t *server)
     rte_free(server);
 }
 
-ns_other_server_t *ns_new_other_server(
-    const char *server_name,
-    uint32_t ip_address, uint16_t listen_port, int protocol
-)
-{
-    ns_other_server_t *server = rte_malloc(
-        server_name,
-        sizeof(struct ns_other_server),
-        0
-    );
-    if (server == NULL) return NULL;
-    bzero(server, sizeof(struct ns_other_server));
-
-    server->server_name = server_name;
-    server->ip_address  = ip_address;
-    server->listen_port = listen_port;
-    server->protocol    = protocol;
-
-    return server;
-}
-
-void ns_free_other_server(ns_other_server_t *server)
-{
-    rte_free(server);
-}
-
 int udp_server_match(
     ns_udp_server_t *server,
     uint32_t ip_address, uint16_t listen_port
@@ -121,22 +95,6 @@ int tcp_server_match(
     if (
         server->ip_address == ip_address &&
         server->listen_port == listen_port
-    ) {
-        return NS_SERVER_MATCH;
-    }
-
-    return NS_SERVER_NOT_MATCH;
-}
-
-int other_server_match(
-    ns_other_server_t *server,
-    uint32_t ip_address, uint16_t listen_port, int protocol
-)
-{
-    if (
-        server->ip_address == ip_address &&
-        server->listen_port == listen_port &&
-        server->protocol == protocol
     ) {
         return NS_SERVER_MATCH;
     }
@@ -170,23 +128,6 @@ int ns_tcp_callbacks_set(
     }
     server->tcp_on_read_cb  = udp_on_read_cb;
     server->tcp_on_write_cb = udp_on_write_cb;
-
-    return NS_OK;
-}
-
-int ns_other_callbacks_set(
-    ns_other_server_t *server,
-    ns_other_on_read_callback  other_on_read_cb,
-    ns_other_on_write_callback other_on_write_cb
-)
-{
-    if (server == NULL) return NS_ERROR_SET_SERVER_CALLBACKS_FAILED;
-    if (server->protocol == IPPROTO_UDP || server->protocol == IPPROTO_TCP) {
-        return NS_ERROR_SET_SERVER_CALLBACKS_FAILED;
-    }
-
-    server->other_on_read_cb  = other_on_read_cb;
-    server->other_on_write_cb = other_on_write_cb;
 
     return NS_OK;
 }

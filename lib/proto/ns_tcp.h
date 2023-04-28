@@ -5,9 +5,9 @@
 
 #include <rte_mbuf.h>
 #include <rte_ether.h>
-#include <rte_ring.h>
 #include <rte_tcp.h>
 #include <rte_ip.h>
+#include <rte_ring.h>
 
 #include <proto/ns_offload.h>
 
@@ -42,11 +42,11 @@ typedef struct ns_tcp_entry {
     uint32_t snd_nxt; // seq number
     uint32_t rcv_nxt; // rcv number
 
-    NS_TCP_STATUS tcp_status;
+    // All tcp entries share the same send queue
+    struct rte_ring *snd_queue;
+    uint32_t         packet_counts;
 
-    // send buffer
-    rte_ring *snd_buffer;
-    rte_ring *rcv_buffer;
+    NS_TCP_STATUS tcp_status;
 
     struct ns_tcp_entry *prev;
     struct ns_tcp_entry *next;
@@ -105,6 +105,18 @@ int tcp_state_machine_exec(
     struct rte_ether_hdr *ether_hdr,
     struct rte_ipv4_hdr *ipv4_hdr, struct rte_tcp_hdr *tcp_hdr,
     ns_offload_t **offload
+);
+
+// dequeue all tcp packets
+// returns:
+//   dequeue packets counts
+uint32_t dequeue_all_tcp_packets(ns_tcp_entry_t *tcp_entry, ns_tcp_packet_t **tcp_pakcets);
+
+// enqueue all tcp packets
+// returns:
+//   enqueue packets counts
+uint32_t enqueue_all_tcp_packets(
+    ns_tcp_entry_t *tcp_entry, ns_tcp_packet_t **tcp_pakcets, int packet_cnt
 );
 
 #endif // _NETSATCK_PROTO_NS_TCP_H_

@@ -43,6 +43,8 @@ const char *ns_strerror(const int error_code)
         return "ns_error_tcp_protocol_illegal";
     case NS_ERROR_RING_ENQUEUE_FAILED:
         return "ns_error_ring_enqueue_failed";
+    case NS_ERROR_RING_DEQUEUE_FAILED:
+        return "ns_error_ring_dequeue_failed";
 
     default:
         break;

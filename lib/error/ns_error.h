@@ -25,6 +25,7 @@ static const int NS_ERROR_CHECKSUM_MISMATCH           = -17;
 static const int NS_ERROR_TCP_SEQ_NUMBER              = -18;
 static const int NS_ERROR_TCP_PROTOCOL_ILLEGAL        = -19;
 static const int NS_ERROR_RING_ENQUEUE_FAILED         = -20;
+static const int NS_ERROR_RING_DEQUEUE_FAILED         = -21;
 
 const char *ns_strerror(const int error_code);
 

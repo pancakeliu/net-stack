@@ -14,7 +14,7 @@
 #include <base/ns_common.h>
 #include <error/ns_error.h>
 
-ns_processor *ns_create_processor()
+ns_processor *ns_create_processor(struct rte_mempool *mem_pool)
 {
     ns_processor *processor = rte_malloc(
         "net-stack processor",
@@ -33,6 +33,7 @@ ns_processor *ns_create_processor()
         return NULL;
     }
     processor->arp_table = arp_table;
+    processor->mem_pool  = mem_pool;
 
     return processor;
 }
@@ -81,24 +82,7 @@ int ns_register_tcp_server(ns_processor_t *processor, ns_tcp_server_t *server)
     return NS_OK;
 }
 
-int process_udp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
-{
-    ns_offload_t *offload = create_offload();
-    if (offload == NULL) {
-        NS_PRINT("new offload failed..\n");
-        return NS_ERROR_RTE_MALLOC_FAILED;
-    }
-    int rc = udp_parse_header(rx_pkt, offload);
-    if (rc != NS_OK) {
-        NS_PRINT("process udp packet failed. err:%s...\n", ns_strerror(rc));
-        free_offload(offload);
-        return rc;
-    }
-    rc = exec_udp_read_cb(processor, offload);
-    free_offload(offload);
-    
-    return rc;
-}
+// UDP Processor
 
 static int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
 {
@@ -113,13 +97,62 @@ static int exec_udp_read_cb(ns_processor_t *processor, ns_offload_t *offload)
         }
 
         if (server_iter->server->udp_on_read_cb) {
-            return server_iter->server->udp_on_read_cb();
+            return server_iter->server->udp_on_read_cb(
+                server_iter->server->send_buffer, offload
+            );
         }
     }
 
     // not match server
     return NS_KNI;
 }
+
+int process_udp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
+{
+    ns_offload_t *offload = create_offload();
+    if (offload == NULL) {
+        NS_PRINT("new offload failed..\n");
+        return NS_ERROR_RTE_MALLOC_FAILED;
+    }
+    int rc = udp_decode_packet(rx_pkt, offload);
+    if (rc != NS_OK) {
+        NS_PRINT("decode udp packet failed. err:%s...\n", ns_strerror(rc));
+        free_offload(offload);
+        return rc;
+    }
+    rc = exec_udp_read_cb(processor, offload);
+    free_offload(offload);
+    
+    return rc;
+}
+
+int exec_udp_write_cb(ns_processor_t *processsor, ns_offload_t *offload)
+{
+    ns_server_entry_t *server_iter = processor->server_entries;
+    for (; server_iter != NULL; server_iter = server_iter->next) {
+        int match = server_match(
+            server_iter->server,
+            offload->dst_ip_addr, offload->dst_port, offload->protocol
+        );
+        if (match != NS_SERVER_MATCH) {
+            continue;
+        }
+
+        if (server_iter->server->udp_on_write_cb != NULL) {
+            return server_iter->server->udp_on_write_cb();
+        }
+    }
+
+    // not match server
+    return NS_KNI;
+}
+
+int process_udp_write_event(ns_offload_t *udp_packet, struct rte_mbuf *tx_pkt)
+{
+
+}
+
+// TCP Processor
 
 static ns_tcp_server_t *search_tcp_server(
     ns_processor_t *processor,
@@ -184,38 +217,50 @@ int process_tcp_read_event(ns_processor_t *processor, struct rte_mbuf *rx_pkt)
         ether_hdr, ipv4_hdr, tcp_hdr,
         &offload
     );
-    if (rc != NS_OK) {
-        return rc;
-    }
+    if (rc != NS_OK) return rc;
 
     // PSH packet received
     if (*offload != NULL) {
         rc = exec_tcp_read_cb(server, tcp_entry, offload);
         free_offload(offload);
+        if (rc != NS_OK) return rc;
     }
 
-    return rc;
-}
+    // Extract packets from the tcp entry's send queue to the server send queue
+    if (tcp_entry->packet_counts == 0) return NS_OK;
 
-int exec_udp_write_cb(ns_processor_t *processsor, ns_offload_t *offload)
-{
-    ns_server_entry_t *server_iter = processor->server_entries;
-    for (; server_iter != NULL; server_iter = server_iter->next) {
-        int match = server_match(
-            server_iter->server,
-            offload->dst_ip_addr, offload->dst_port, offload->protocol
-        );
-        if (match != NS_SERVER_MATCH) {
-            continue;
-        }
+    ns_tcp_packet_t **tcp_packets = rte_malloc(
+        ns_tcp_packet_t **, tcp_entry->packet_counts, 0
+    );
+    if (tcp_packets == NULL) return NS_ERROR_RTE_MALLOC_FAILED;
 
-        if (server_iter->server->udp_on_write_cb != NULL) {
-            return server_iter->server->udp_on_write_cb();
-        }
+    uint32_t packet_cnt = dequeue_all_tcp_packets(tcp_entry, tcp_packets);
+    if (packet_cnt == 0) return NS_OK;
+
+    // enqueue into the server send queue
+    uint32_t en_packet_cnt = rte_ring_enqueue_burst(
+        server->snd_queue,
+        tcp_packets,
+        packet_cnt,
+        NULL
+    );
+
+    // Determine if all packets have been stuffed into the server send queue
+    packet_cnt -= en_packet_cnt;
+    if (packet_cnt == 0) {
+        rte_free(tcp_packets);
+        return NS_OK;
     }
 
-    // not match server
-    return NS_KNI;
+    // server queue full, some packets 
+    en_packet_cnt = enqueue_all_tcp_packets(tcp_entry, tcp_packets+en_packet_cnt, packet_cnt);
+    rte_free(tcp_packets);
+    if (en_packet_cnt != packet_cnt) {
+        NS_PRINT("refill tcp packets into tcp entry send queue failed.");
+        return NS_ERROR_CODE;
+    }
+
+    return NS_OK;
 }
 
 int exec_tcp_write_cb(ns_processor_t *processor, ns_offload_t *offload)
@@ -237,4 +282,9 @@ int exec_tcp_write_cb(ns_processor_t *processor, ns_offload_t *offload)
 
     // not match server
     return NS_KNI;
+}
+
+int process_tcp_write_event(ns_tcp_packet_t *tcp_packet, struct rte_mbuf *tx_pkt)
+{
+
 }

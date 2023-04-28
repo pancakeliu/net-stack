@@ -58,7 +58,8 @@ static int tcp_handle_fin_wait_1_status_packet(
 );
 
 static int tcp_handle_fin_wait_2_status_packet(
-    ns_tcp_entry_t *tcp_entry, struct rte_tcp_hdr *tcp_hdr
+    ns_tcp_entry_t *tcp_entry, struct rte_ring *snd_queue,
+    struct rte_tcp_hdr *tcp_hdr
 );
 
 static int tcp_handle_closing_status_packet(
@@ -100,6 +101,8 @@ ns_tcp_entry_t *create_tcp_entry(
     uint8_t *src_mac_address
 )
 {
+    if (!snd_queue) return NS_ERROR_CODE;
+
     ns_tcp_entry_t *tcp_entry = rte_malloc(
         "net-stack tcp entry",
         sizeof(struct ns_tcp_entry),
@@ -124,12 +127,6 @@ ns_tcp_entry_t *create_tcp_entry(
         sbuf_name, RING_SIZE, rte_socket_id(), NULL
     );
 
-    char rbuf_name[RING_NAME_SIZE] = {};
-    snprintf(rbuf_name, RING_NAME_SIZE, "rcvbuf:%x%d", src_ip, src_port);
-    tcp_entry->rcv_buffer = rte_ring_create(
-        rbuf_name, RING_SIZE, rte_socket_id(), NULL
-    );
-
     // In a typical implementation of the TCP protocol,
     // the snd_next field of tcp is usually initialized to a random number
     // However, if this random number is initialised too large,
@@ -145,8 +142,7 @@ ns_tcp_entry_t *create_tcp_entry(
 
 void free_tcp_entry(ns_tcp_entry_t *tcp_entry)
 {
-    rte_ring_free(tcp_entry->snd_buffer);
-    rte_ring_free(tcp_entry->rcv_buffer);
+    rte_ring_free(tcp_entry->snd_queue);
     rte_free(tcp_entry);
 }
 
@@ -214,7 +210,7 @@ int tcp_parse_header(
         sizeof(struct rte_ether_hdr)
     );
     *tcp_hdr = rte_pktmbuf_mtod_offset(
-        tcp_mbufk,
+        tcp_mbuf,
         struct rte_tcp_hdr *,
         sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr)
     );
@@ -302,6 +298,42 @@ int tcp_state_machine_exec(
     return rc;
 }
 
+uint32_t dequeue_all_tcp_packets(ns_tcp_entry_t *tcp_entry, ns_tcp_packet_t **tcp_pakcets)
+{
+    if (tcp_entry->packet_counts == 0) return 0;
+
+    uint32_t cnt = rte_ring_dequeue_burst(
+        tcp_entry->snd_queue,
+        tcp_pakcets,
+        tcp_entry->packet_counts,
+        NULL
+    );
+
+    // zeroing packet counts
+    tcp_entry->packet_counts -= cnt;
+
+    return cnt;
+}
+
+uint32_t enqueue_all_tcp_packets(
+    ns_tcp_entry_t *tcp_entry, ns_tcp_packet_t **tcp_pakcets, int packet_cnt
+)
+{
+    if (packet_cnt == 0) return 0;
+
+    uint32_t cnt = rte_ring_enqueue_burst(
+        tcp_entry->snd_queue,
+        tcp_pakcets,
+        packet_cnt,
+        NULL
+    );
+
+    // fill packet counts
+    tcp_entry->packet_counts += cnt;
+
+    return cnt;
+}
+
 // tcp server status handler functions
 static int tcp_handle_listen_status_packet(
     ns_tcp_table_t *tcp_table,
@@ -326,12 +358,11 @@ static int tcp_handle_listen_status_packet(
     update_recv_seq_number(syn_tcp_entry, tcp_hdr);
     // Send back SYN + ACK packet
     int rc = tcp_send_packet(
-        syn_tcp_entry, tcp_hdr, RTE_TCP_SYN_FLAG | RTE_TCP_ACK_FLAG,
+        syn_tcp_entry,
+        tcp_hdr, RTE_TCP_SYN_FLAG | RTE_TCP_ACK_FLAG,
         0, NULL
     );
-    if (rc != NS_OK) {
-        return rc;
-    }
+    if (rc != NS_OK) return rc;
 
     tcp_entry->tcp_status = NS_TCP_STATUS_SYN_RCVD;
 
@@ -441,7 +472,8 @@ static int tcp_handle_syn_sent_status_packet(
 
     update_recv_seq_number(tcp_entry, tcp_hdr);
     int rc = tcp_send_packet(
-        tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+        tcp_entry
+        tcp_hdr, RTE_TCP_ACK_FLAG,
         0, NULL
     );
     if (rc != NS_OK) {
@@ -462,7 +494,8 @@ static int tcp_handle_fin_wait_1_status_packet(
         if (tcp_hdr->tcp_flags & RTE_TCP_FIN_FLAG) {
             update_recv_seq_number(tcp_entry, tcp_hdr);
             int rc = tcp_send_packet(
-                tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+                tcp_entry,
+                tcp_hdr, RTE_TCP_ACK_FLAG,
                 0, NULL
             );
             if (rc != NS_OK) {
@@ -486,7 +519,8 @@ static int tcp_handle_fin_wait_1_status_packet(
         tcp_entry->tcp_status = NS_TCP_STATUS_CLOSING;
 
         return tcp_send_packet(
-            tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+            tcp_entry,
+            tcp_hdr, RTE_TCP_ACK_FLAG,
             0, NULL
         );
     }
@@ -506,7 +540,8 @@ static int tcp_handle_fin_wait_2_status_packet(
     tcp_entry->tcp_status = NS_TCP_STATUS_TIME_WAIT;
 
     return tcp_send_packet(
-        tcp_entry, tcp_hdr, RTE_TCP_ACK_FLAG,
+        tcp_entry,
+        tcp_hdr, RTE_TCP_ACK_FLAG,
         0, NULL
     );
 }
@@ -584,11 +619,12 @@ static int tcp_send_packet(
     tcp_packet->data_length = data_len;
     tcp_packet->data        = data;
 
-    int rc = rte_ring_enqueue(tcp_entry->snd_buffer, tcp_packet);
+    int rc = rte_ring_enqueue(tcp_entry->snd_queue, tcp_packet);
     if (rc != 0) {
         free_tcp_packet(tcp_packet);
         return NS_ERROR_RING_ENQUEUE_FAILED;
     }
+    tcp_entry->packet_counts++;
 
     return NS_OK;
 }
