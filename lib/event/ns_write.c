@@ -7,12 +7,12 @@
 
 static int handle_tcp_write_event(ns_tcp_packet_t *tcp_packet, struct rte_mbuf *tx_pkt)
 {
-
+    
 }
 
-static int handle_udp_write_event(ns_offload_t *udp_packet, struct rte_mbuf *tx_pkt)
+static int handle_udp_write_event(struct rte_mbuf *tx_pkt, ns_offload_t *udp_packet)
 {
-
+    return udp_encode_packet(tx_pkt, udp_packet);
 }
 
 uint32_t handle_write_events(

@@ -9,8 +9,15 @@
 
 #include <proto/ns_offload.h>
 
-int udp_decode_packet(struct rte_mbuf *udp_mbuf, ns_offload_t *offload);
+typedef struct ns_udp_offload {
+    char src_ether_addr[RTE_ETHER_ADDR_LEN];
+    char dst_ether_addr[RTE_ETHER_ADDR_LEN];
 
-int udp_encode_packet(struct rte_mbuf *udp_mbuf, ns_offload_t *offload);
+    ns_offload_t offload;
+} ns_udp_offload_t;
+
+int udp_decode_packet(struct rte_mbuf *udp_mbuf, ns_udp_offload_t *offload);
+
+int udp_encode_packet(struct rte_mbuf *udp_mbuf, ns_udp_offload_t *offload);
 
 #endif // _NETSATCK_PROTO_UDP_H_

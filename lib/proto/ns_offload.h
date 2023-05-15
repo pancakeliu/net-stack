@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <netinet/in.h>
 
+#include <rte_ether.h>
+
 typedef struct ns_offload {
     // network five tuple
     uint32_t src_ip_addr;

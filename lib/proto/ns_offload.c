@@ -4,6 +4,7 @@
 #include <errno.h>
 
 #include <rte_malloc.h>
+#include <rte_memcpy.h>
 
 #include <proto/ns_offload.h>
 #include <error/ns_error.h>
@@ -45,7 +46,7 @@ int fill_five_tuple(
     return NS_OK;
 }
 
-int fill_data(char *data, uint16_t data_len)
+int fill_data(ns_offload_t *offload, char *data, uint16_t data_len)
 {
     if (offload == NULL) {
         return NS_ERROR_CODE;
@@ -53,6 +54,18 @@ int fill_data(char *data, uint16_t data_len)
     // NOTICE: Here a shallow copy is used to improve performance. data is later released
     offload->data     = data;
     offload->data_len = data_len;
+
+    return NS_OK;
+}
+
+int fill_ether_address(ns_offload_t *offload, char *src_ether_addr, char *dst_ether_ether)
+{
+    if (offload == NULL) {
+        return NS_ERROR_CODE;
+    }
+
+    rte_memcpy(offload->src_ether_addr, src_ether_addr, RTE_ETHER_ADDR_LEN);
+    rte_memcpy(offload->dst_ether_addr, dst_ether_addr, RTE_ETHER_ADDR_LEN);
 
     return NS_OK;
 }

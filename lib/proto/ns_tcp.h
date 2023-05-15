@@ -119,4 +119,9 @@ uint32_t enqueue_all_tcp_packets(
     ns_tcp_entry_t *tcp_entry, ns_tcp_packet_t **tcp_pakcets, int packet_cnt
 );
 
+int tcp_encode_packet(
+    struct rte_mbuf *tcp_mbuf, ns_offload_t *offload,
+    uint32_t seq_num, uint32_t ack_num, 
+);
+
 #endif // _NETSATCK_PROTO_NS_TCP_H_

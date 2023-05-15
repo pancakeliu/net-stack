@@ -21,6 +21,9 @@
 #define RING_SIZE      1024
 #define TCP_WINDOW     25600
 
+#define IPV4_HEADER_LEN 20
+#define TCP_HEADER_LEN  20
+
 // TODO: Retransmission packet handling
 // TODO: Disordered packet handling
 
@@ -627,4 +630,52 @@ static int tcp_send_packet(
     tcp_entry->packet_counts++;
 
     return NS_OK;
+}
+
+// TODO: TCP Segmentation is not supported
+int tcp_encode_packet(struct rte_mbuf *tcp_mbuf, ns_offload_t *offload)
+{
+    // total packet length
+    uint16_t packet_total_len = offload->data_len + RTE_ETHER_HDR_LEN
+        + IPV4_HEADER_LEN + TCP_HEADER_LEN;
+    
+    // ether header
+    struct rte_ether_hdr *ether_hdr = rte_pktmbuf_mtod(tcp_mbuf, struct rte_ether_hdr *);
+    rte_memcpy(ether_hdr->src_addr, offload->src_ether_addr, RTE_ETHER_ADDR_LEN);
+    rte_memcoy(ether_hdr->dst_addr, offload->dst_ether_addr, RTE_ETHER_ADDR_LEN);
+    ether_hdr->ether_type = htons(RTE_ETHER_TYPE_IPV4);
+
+    // ipv4 header
+    struct rte_ipv4_hdr *ipv4_hdr = rte_pktmbuf_mtod_offset(
+        tcp_mbuf,
+        struct rte_ipv4_hdr *,
+        sizeof(struct rte_ether_hdr)
+    );
+    // ipv4 version
+    ipv4_hdr->version = 0x4;
+    // 0101 => 160 bits = 20 bytes ==> minimal value (header without data) [RFC 6274 - page 9]
+    ipv4_hdr->ihl = 0x5;
+
+    ipv4_hdr->type_of_service = 0;
+    ipv4_hdr->total_length    = htons(packet_total_len - RTE_ETHER_HDR_LEN);
+    ipv4_hdr->packet_id       = 0;
+    ipv4_hdr->fragment_offset = 0;
+    ipv4_hdr->time_to_live    = 64;
+    ipv4_hdr->next_proto_id   = IPPROTO_TCP;
+
+    ipv4_hdr->src_addr  = offload->src_ip_addr;
+    ipv4_hdr->dest_addr = offload->dest_ip_addr;
+
+    // calculate ipv4 header checksum
+    ipv4_hdr->checksum = 0;
+    ipv4_hdr->checksum = rte_ipv4_cksum(ipv4_hdr);
+
+    // tcp header
+    struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(
+        tcp_mbuf,
+        struct rte_tcp_hdr *,
+        sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr)
+    );
+    tcp_hdr->src_port = offload->src_port;
+    tcp_hdr->dst_port = offload->dst_port;
 }
